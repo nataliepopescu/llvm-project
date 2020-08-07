@@ -167,6 +167,7 @@ public:
   bool PrepareForThinLTO;
   bool PerformThinLTO;
   bool DivergentTarget;
+  bool RemoveBC;
   unsigned LicmMssaOptCap;
   unsigned LicmMssaNoAccForPromotionCap;
 

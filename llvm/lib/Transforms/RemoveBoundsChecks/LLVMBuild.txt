@@ -1,0 +1,6 @@
+[component_0]
+type = Library
+name = RemoveBoundsChecks
+parent = Transforms
+library_name = RemoveBoundsChecks
+required_libraries = AggressiveInstCombine Analysis BitReader BitWriter Core InstCombine IRReader Linker Object ProfileData Scalar Support TransformUtils Vectorize Instrumentation

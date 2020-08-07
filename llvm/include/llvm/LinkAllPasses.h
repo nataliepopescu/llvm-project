@@ -47,6 +47,7 @@
 #include "llvm/Transforms/Instrumentation.h"
 #include "llvm/Transforms/Instrumentation/BoundsChecking.h"
 #include "llvm/Transforms/ObjCARC.h"
+#include "llvm/Transforms/RemoveBoundsChecks.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
@@ -163,6 +164,7 @@ namespace {
       (void) llvm::createRegionOnlyViewerPass();
       (void) llvm::createRegionPrinterPass();
       (void) llvm::createRegionViewerPass();
+      (void) llvm::createRemoveBoundsChecksPass();
       (void) llvm::createSCCPPass();
       (void) llvm::createSafeStackPass();
       (void) llvm::createSROAPass();

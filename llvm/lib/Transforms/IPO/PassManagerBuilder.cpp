@@ -36,6 +36,7 @@
 #include "llvm/Transforms/IPO/InferFunctionAttrs.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Instrumentation.h"
+#include "llvm/Transforms/RemoveBoundsChecks.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Scalar/InstSimplifyPass.h"
@@ -175,6 +176,7 @@ PassManagerBuilder::PassManagerBuilder() {
     PrepareForThinLTO = EnablePrepareForThinLTO;
     PerformThinLTO = EnablePerformThinLTO;
     DivergentTarget = false;
+    RemoveBC = false;
 }
 
 PassManagerBuilder::~PassManagerBuilder() {
@@ -250,6 +252,12 @@ void PassManagerBuilder::populateFunctionPassManager(
     legacy::FunctionPassManager &FPM) {
   addExtensionsToPM(EP_EarlyAsPossible, FPM);
   FPM.add(createEntryExitInstrumenterPass());
+
+  if (RemoveBC) {
+    FPM.add(createRemoveBoundsChecksPass());
+    FPM.add(createCFGSimplificationPass());
+    FPM.add(createDeadInstEliminationPass());
+  }
 
   // Add LibraryInfo if we have some.
   if (LibraryInfo)
@@ -1054,7 +1062,7 @@ inline LLVMPassManagerBuilderRef wrap(PassManagerBuilder *P) {
 }
 
 LLVMPassManagerBuilderRef LLVMPassManagerBuilderCreate() {
-  PassManagerBuilder *PMB = new PassManagerBuilder();
+  PassManagerBuilder *PMB = new PassManagerBuilder(); // HERE
   return wrap(PMB);
 }
 

@@ -1,3 +1,4 @@
+add_subdirectory(RemoveBoundsChecks)
 add_subdirectory(Utils)
 add_subdirectory(Instrumentation)
 add_subdirectory(AggressiveInstCombine)
