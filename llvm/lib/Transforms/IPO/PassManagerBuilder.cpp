@@ -256,7 +256,7 @@ void PassManagerBuilder::populateFunctionPassManager(
   if (RemoveBC) {
     FPM.add(createRemoveBoundsChecksPass());
     FPM.add(createCFGSimplificationPass());
-    FPM.add(createDeadInstEliminationPass());
+    FPM.add(createDeadCodeEliminationPass());
   }
 
   // Add LibraryInfo if we have some.
