@@ -253,11 +253,11 @@ void PassManagerBuilder::populateFunctionPassManager(
   addExtensionsToPM(EP_EarlyAsPossible, FPM);
   FPM.add(createEntryExitInstrumenterPass());
 
-  if (RemoveBC) {
+  /*if (RemoveBC) {
     FPM.add(createRemoveBoundsChecksPass());
     FPM.add(createCFGSimplificationPass());
     FPM.add(createDeadCodeEliminationPass());
-  }
+  }*/
 
   // Add LibraryInfo if we have some.
   if (LibraryInfo)
@@ -433,6 +433,13 @@ void PassManagerBuilder::addFunctionSimplificationPasses(
 
 void PassManagerBuilder::populateModulePassManager(
     legacy::PassManagerBase &MPM) {
+
+  if (RemoveBC) {
+    MPM.add(createRemoveBoundsChecksPass());
+    MPM.add(createCFGSimplificationPass());
+    MPM.add(createDeadCodeEliminationPass());
+  }
+
   // Whether this is a default or *LTO pre-link pipeline. The FullLTO post-link
   // is handled separately, so just check this is not the ThinLTO post-link.
   bool DefaultOrPreLinkPipeline = !PerformThinLTO;
