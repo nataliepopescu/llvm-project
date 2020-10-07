@@ -43,24 +43,24 @@ namespace {
     // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
     bool runOnFunction (Function &F) override {
       for (BasicBlock &bb: F) {
-        std::set<Instruction*> toremove;
         BasicBlock* succ;
-        Instruction* bcI;
-        bool startErasing = false;
         for (Instruction &I: bb) {
-          if (startErasing) {
-            toremove.insert(&I);
-            continue;
-          }
           if (CallBase* cs = dyn_cast<CallBase>(&I)) {
             if (getFunctionName(cs).startswith("_ZN4core9panicking18panic_bounds_check")) {
+	      // bad b/c we may be changing the semantics of the program
+	      if (InvokeInst* ii = dyn_cast<InvokeInst>(&I)) {
+	        errs() << "panic_bounds_check INVOKED\n";
+	      } else {
+	        errs() << "panic_bounds_check CALLED\n";
+	      }
               // get predecessor of the basic block
               // get the last branch inst of the predecessor
               // create a branch to the othe
-              for (BasicBlock* pred: predecessors(&bb)) {
+              for (BasicBlock* pred: predecessors(&bb)) { // maybe our unlinking invalidates some of these preds?
                 // found bounds check
                 Instruction *term = pred->getTerminator();
-                if (term->getNumSuccessors() == 2) {// one is bb, one is the original next block
+	        int numSucc = term->getNumSuccessors();
+                if (numSucc == 2) { // one is bb, one is the original next block
                   if (term->getSuccessor(0) == &bb) {
                     succ = term->getSuccessor(1);
                   } else {
@@ -68,23 +68,16 @@ namespace {
                   }
                   BranchInst::Create(succ, term);
                   term->eraseFromParent();
-                }
-                else {
+                } else if (numSucc == 1) { // may be leading to a landing pad, so iteratively go up until conditional branch to panic_bounds_check
+	          errs() << "only one successor in the previous block\n";
+	        } else {
                   errs() << "more than two successors in the previous block\n";
                 }
               }
             }
           }
         }
-
-        if (startErasing){
-          BranchInst::Create(succ, bcI);
-          for (auto *i: toremove){
-            i->eraseFromParent();
-          }
-        }
       }
-
       return true;
     }
 
