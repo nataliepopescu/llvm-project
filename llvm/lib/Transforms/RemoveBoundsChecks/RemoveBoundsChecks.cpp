@@ -47,19 +47,19 @@ namespace {
         for (Instruction &I: bb) {
           if (CallBase* cs = dyn_cast<CallBase>(&I)) {
             if (getFunctionName(cs).startswith("_ZN4core9panicking18panic_bounds_check")) {
-	      // bad b/c we may be changing the semantics of the program
-	      if (InvokeInst* ii = dyn_cast<InvokeInst>(&I)) {
-	        errs() << "panic_bounds_check INVOKED\n";
-	      } else {
-	        errs() << "panic_bounds_check CALLED\n";
-	      }
+              // bad b/c we may be changing the semantics of the program
+              if (InvokeInst* ii = dyn_cast<InvokeInst>(&I)) {
+                errs() << "panic_bounds_check INVOKED\n";
+              } else {
+                errs() << "panic_bounds_check CALLED\n";
+              }
               // get predecessor of the basic block
               // get the last branch inst of the predecessor
               // create a branch to the othe
               for (BasicBlock* pred: predecessors(&bb)) { // maybe our unlinking invalidates some of these preds?
                 // found bounds check
                 Instruction *term = pred->getTerminator();
-	        int numSucc = term->getNumSuccessors();
+                int numSucc = term->getNumSuccessors();
                 if (numSucc == 2) { // one is bb, one is the original next block
                   if (term->getSuccessor(0) == &bb) {
                     succ = term->getSuccessor(1);
@@ -69,8 +69,8 @@ namespace {
                   BranchInst::Create(succ, term);
                   term->eraseFromParent();
                 } else if (numSucc == 1) { // may be leading to a landing pad, so iteratively go up until conditional branch to panic_bounds_check
-	          errs() << "only one successor in the previous block\n";
-	        } else {
+                  errs() << "only one successor in the previous block\n";
+                } else {
                   errs() << "more than two successors in the previous block\n";
                 }
               }
@@ -97,7 +97,7 @@ INITIALIZE_PASS(RemoveBoundsChecks, "remove-bc", "Remove Bounds Checks", false, 
 //static RegisterPass<RemoveBoundsChecks> X("remove-bc", "Remove Bounds Checks"); // only registers for opt tool
 
 Pass *llvm::createRemoveBoundsChecksPass() { 
-	return new RemoveBoundsChecks();
+        return new RemoveBoundsChecks();
 }
 
 // Next there is code to register your pass to "clang"
