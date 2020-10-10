@@ -42,6 +42,8 @@ namespace {
     // This function is invoked once per function compiled
     // The LLVM IR of the input functions is ready and it can be analyzed and/or transformed
     bool runOnFunction (Function &F) override {
+      typedef std::pair<Instruction*, BasicBlock*> edge;
+      std::vector<edge> toRemove;
       for (BasicBlock &bb: F) {
         BasicBlock* succ;
         for (Instruction &I: bb) {
@@ -66,8 +68,9 @@ namespace {
                   } else {
                     succ = term->getSuccessor(0);
                   }
-                  BranchInst::Create(succ, term);
-                  term->eraseFromParent();
+                  toRemove.push_back(edge(term, succ)); // log it in the vector
+                  // BranchInst::Create(succ, term);
+                  // term->eraseFromParent();
                 } else if (numSucc == 1) { // may be leading to a landing pad, so iteratively go up until conditional branch to panic_bounds_check
                   errs() << "only one successor in the previous block\n";
                 } else {
@@ -77,6 +80,13 @@ namespace {
             }
           }
         }
+      }
+
+      for (auto &i : toRemove){
+        auto term = i.first;
+        auto succ = i.second;
+        BranchInst::Create(succ, term);
+        term->eraseFromParent();
       }
       return true;
     }
