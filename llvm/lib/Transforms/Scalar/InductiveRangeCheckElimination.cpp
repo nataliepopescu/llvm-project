@@ -59,6 +59,7 @@
 #include "llvm/Analysis/PostDominators.h"
 #include "llvm/Analysis/ScalarEvolution.h"
 #include "llvm/Analysis/ScalarEvolutionExpressions.h"
+#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constants.h"
@@ -258,8 +259,12 @@ public:
     AU.addPreserved<DominatorTreeWrapperPass>();
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addPreserved<LoopInfoWrapperPass>();
+    AU.addRequired<PostDominatorTreeWrapperPass>();
+    AU.addPreserved<PostDominatorTreeWrapperPass>();
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addPreserved<ScalarEvolutionWrapperPass>();
+    AU.addRequired<TargetLibraryInfoWrapperPass>();
+    AU.addPreserved<TargetLibraryInfoWrapperPass>();
   }
 
   bool runOnFunction(Function &F) override;
@@ -274,7 +279,9 @@ INITIALIZE_PASS_BEGIN(IRCELegacyPass, "irce",
 INITIALIZE_PASS_DEPENDENCY(BranchProbabilityInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(PostDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(IRCELegacyPass, "irce", "Inductive range check elimination",
                     false, false)
 
@@ -335,6 +342,17 @@ InductiveRangeCheck::parseRangeCheckICmp(Loop *L, ICmpInst *ICI,
       Index = RHS;
       Length = LHS;
       return true; // Both lower and upper.
+    }
+    return false;
+
+  case ICmpInst::ICMP_NE:
+    if (IsLoopInvariant(RHS))
+      std::swap(LHS, RHS);
+    if (IsLoopInvariant(LHS)) {
+      Index = RHS;
+      Length = LHS;
+      IsSigned = true;
+      return true;  // Upper
     }
     return false;
   }
@@ -862,7 +880,9 @@ LoopStructure::parseLoopStructure(ScalarEvolution &SE,
   }
   ConstantInt *StepCI = cast<SCEVConstant>(StepRec)->getValue();
 
-  if (ICI->isEquality() && !HasNoSignedWrap(IndVarBase)) {
+  // ignore signed wrap
+  //if (ICI->isEquality() && !HasNoSignedWrap(IndVarBase)) {
+  if (ICI->isEquality() && false) {
     FailureReason = "LHS in icmp needs nsw for equality predicates";
     return None;
   }
@@ -1766,6 +1786,50 @@ IntersectUnsignedRange(ScalarEvolution &SE,
   return Ret;
 }
 
+// align the hot path (if any) with the true path
+static bool canonicalizeLoopExitCond(Loop &L, BranchProbabilityInfo *BPI) {
+  if (!BPI)
+    return false;
+  SmallVector<BasicBlock *, 8> exitingBlocks;
+  L.getExitingBlocks(exitingBlocks);
+  // no need to do anything for loops with only one loop exit
+  if (exitingBlocks.size() == 1)
+    return false;
+
+  bool changed = false;
+  for (BasicBlock *exitingBlock : exitingBlocks) {
+    BranchInst *bI = dyn_cast<BranchInst>(exitingBlock->getTerminator());
+
+    if (bI->isUnconditional() || exitingBlock == L.getLoopLatch())
+      continue;
+
+    CmpInst *cI = dyn_cast<CmpInst>(bI->getCondition());
+    if (!cI)
+      continue;
+    // only modify equality cond
+    if (!cI->isEquality())
+      continue;
+
+    // find hot path (if any)
+    BranchProbability LikelyTaken(15, 16);
+
+    // check if the hot path is already the true path
+    if (BPI->getEdgeProbability(exitingBlock, (unsigned)0) >= LikelyTaken)
+      continue;
+
+    // do not modify the branch if the branch is not biased
+    if (BPI->getEdgeProbability(exitingBlock, (unsigned)1) < LikelyTaken)
+      continue;
+
+    // the branch is biased but the hot path is not aligned with the true path.
+    // Need to inverse the condition
+    cI->setPredicate(cI->getInversePredicate());
+    bI->swapSuccessors();
+    changed = true;
+  }
+  return changed;
+}
+
 PreservedAnalyses IRCEPass::run(Function &F, FunctionAnalysisManager &AM) {
   auto &SE = AM.getResult<ScalarEvolutionAnalysis>(F);
   auto &DT = AM.getResult<DominatorTreeAnalysis>(F);
@@ -1780,7 +1844,13 @@ PreservedAnalyses IRCEPass::run(Function &F, FunctionAnalysisManager &AM) {
     Changed |= simplifyLoop(L, &DT, &LI, &SE, nullptr, nullptr,
                             /*PreserveLCSSA=*/false);
     Changed |= formLCSSARecursively(*L, DT, &LI, &SE);
+    Changed |= canonicalizeLoopExitCond(*L, &BPI);
   }
+
+  // recompute BranchProbabilityInfo
+  auto *TLI = &AM.getResult<TargetLibraryAnalysis>(F);
+  auto *PDT = &AM.getResult<PostDominatorTreeAnalysis>(F);
+  BPI.calculate(F, LI, TLI, PDT);
 
   SmallPriorityWorklist<Loop *, 4> Worklist;
   appendLoopsToWorklist(LI, Worklist);
@@ -1816,7 +1886,13 @@ bool IRCELegacyPass::runOnFunction(Function &F) {
     Changed |= simplifyLoop(L, &DT, &LI, &SE, nullptr, nullptr,
                             /*PreserveLCSSA=*/false);
     Changed |= formLCSSARecursively(*L, DT, &LI, &SE);
+    Changed |= canonicalizeLoopExitCond(*L, &BPI);
   }
+
+  // recompute BranchProbabilityInfo
+  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
+  auto *PDT = &getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
+  BPI.calculate(F, LI, TLI, PDT);
 
   SmallPriorityWorklist<Loop *, 4> Worklist;
   appendLoopsToWorklist(LI, Worklist);
@@ -1853,8 +1929,10 @@ bool InductiveRangeCheckElimination::run(
       InductiveRangeCheck::extractRangeChecksFromBranch(TBI, L, SE, BPI,
                                                         RangeChecks);
 
-  if (RangeChecks.empty())
+  if (RangeChecks.empty()) {
+    LLVM_DEBUG(dbgs() << "irce: no range checks found, leaving\n");
     return false;
+  }
 
   auto PrintRecognizedRangeChecks = [&](raw_ostream &OS) {
     OS << "irce: looking at loop "; L->print(OS);
