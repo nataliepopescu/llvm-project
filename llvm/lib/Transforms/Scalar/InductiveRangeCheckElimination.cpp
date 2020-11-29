@@ -258,8 +258,6 @@ public:
     AU.addPreserved<DominatorTreeWrapperPass>();
     AU.addRequired<LoopInfoWrapperPass>();
     AU.addPreserved<LoopInfoWrapperPass>();
-    AU.addRequired<PostDominatorTreeWrapperPass>();
-    AU.addPreserved<PostDominatorTreeWrapperPass>();
     AU.addRequired<ScalarEvolutionWrapperPass>();
     AU.addPreserved<ScalarEvolutionWrapperPass>();
     AU.addRequired<TargetLibraryInfoWrapperPass>();
@@ -278,7 +276,6 @@ INITIALIZE_PASS_BEGIN(IRCELegacyPass, "irce",
 INITIALIZE_PASS_DEPENDENCY(BranchProbabilityInfoWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(PostDominatorTreeWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(ScalarEvolutionWrapperPass)
 INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
 INITIALIZE_PASS_END(IRCELegacyPass, "irce", "Inductive range check elimination",
@@ -1848,8 +1845,7 @@ PreservedAnalyses IRCEPass::run(Function &F, FunctionAnalysisManager &AM) {
 
   // recompute BranchProbabilityInfo
   auto *TLI = &AM.getResult<TargetLibraryAnalysis>(F);
-  auto *PDT = &AM.getResult<PostDominatorTreeAnalysis>(F);
-  BPI.calculate(F, LI, TLI, PDT);
+  BPI.calculate(F, LI, TLI);
 
   SmallPriorityWorklist<Loop *, 4> Worklist;
   appendLoopsToWorklist(LI, Worklist);
@@ -1889,9 +1885,8 @@ bool IRCELegacyPass::runOnFunction(Function &F) {
   }
 
   // recompute BranchProbabilityInfo
-  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI(F);
-  auto *PDT = &getAnalysis<PostDominatorTreeWrapperPass>().getPostDomTree();
-  BPI.calculate(F, LI, TLI, PDT);
+  auto *TLI = &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
+  BPI.calculate(F, LI, TLI);
 
   SmallPriorityWorklist<Loop *, 4> Worklist;
   appendLoopsToWorklist(LI, Worklist);
