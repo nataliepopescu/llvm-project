@@ -1800,15 +1800,15 @@ static bool canonicalizeLoopExitCond(Loop &L, BranchProbabilityInfo *BPI) {
   for (BasicBlock *exitingBlock : exitingBlocks) {
     BranchInst *bI = dyn_cast<BranchInst>(exitingBlock->getTerminator());
 
-    if (bI->isUnconditional() || exitingBlock == L.getLoopLatch())
+    if (!bI || bI->isUnconditional() || exitingBlock == L.getLoopLatch())
       continue;
 
     CmpInst *cI = dyn_cast<CmpInst>(bI->getCondition());
     if (!cI)
       continue;
     // only modify equality cond
-    if (!cI->isEquality())
-      continue;
+    //if (!cI->isEquality())
+    //  continue;
 
     // find hot path (if any)
     BranchProbability LikelyTaken(15, 16);
